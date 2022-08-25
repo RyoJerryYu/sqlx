@@ -1,3 +1,4 @@
+//go:build go1.8
 // +build go1.8
 
 package sqlx
@@ -9,6 +10,8 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"reflect"
+
+	"go.opentelemetry.io/otel"
 )
 
 // ConnectContext to a database and verify with a ping.
@@ -52,12 +55,19 @@ type ExtContext interface {
 // StructScan is used. The *sql.Rows are closed automatically.
 // Any placeholder parameters are replaced with supplied args.
 func SelectContext(ctx context.Context, q QueryerContext, dest interface{}, query string, args ...interface{}) error {
+	tracer := otel.GetTracerProvider().Tracer("bchat-server") // hard code
+
+	ctx, span1 := tracer.Start(ctx, "sqlx.SelectContext.Query")
 	rows, err := q.QueryxContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
+	span1.End()
 	// if something happens here, we want to make sure the rows are Closed
 	defer rows.Close()
+
+	_, span2 := tracer.Start(ctx, "sqlx.SelectContext.Scan")
+	defer span2.End()
 	return scanAll(rows, dest, false)
 }
 
